@@ -1,0 +1,21 @@
+{
+  "name": "chronic-care-api",
+  "version": "1.0.0",
+  "description": "Serverless API for chronic care management",
+  "main": "serverless.ts",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "remove": "serverless remove"
+  },
+  "dependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^4.7.4",
+    "serverless": "^3.22.0",
+    "serverless-offline": "^11.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^2.5.1",
+	"@continuedev/cli": "^1.5.26"
+  }
+}
+
