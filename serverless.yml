@@ -1,0 +1,282 @@
+service: chronic-care-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 30
+  
+  vpc:
+    securityGroupIds:
+      - ${ssm:/chronic-care/${self:provider.stage}/vpc/security-group-id}
+    subnetIds:
+      - ${ssm:/chronic-care/${self:provider.stage}/vpc/subnet-id-1}
+      - ${ssm:/chronic-care/${self:provider.stage}/vpc/subnet-id-2}
+  
+  environment:
+    STAGE: ${self:provider.stage}
+    DB_HOST: ${ssm:/chronic-care/${self:provider.stage}/db/host}
+    DB_PORT: ${ssm:/chronic-care/${self:provider.stage}/db/port}
+    DB_NAME: ${ssm:/chronic-care/${self:provider.stage}/db/name}
+    DB_USER: ${ssm:/chronic-care/${self:provider.stage}/db/user}
+    DB_PASSWORD: ${ssm:/chronic-care/${self:provider.stage}/db/password~true}
+    REDIS_HOST: ${ssm:/chronic-care/${self:provider.stage}/redis/host}
+    REDIS_PORT: ${ssm:/chronic-care/${self:provider.stage}/redis/port}
+    RABBITMQ_HOST: ${ssm:/chronic-care/${self:provider.stage}/rabbitmq/host}
+    RABBITMQ_USER: ${ssm:/chronic-care/${self:provider.stage}/rabbitmq/user}
+    RABBITMQ_PASSWORD: ${ssm:/chronic-care/${self:provider.stage}/rabbitmq/password~true}
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - sns:Publish
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+          Resource: 
+            - arn:aws:s3:::chronic-care-${self:provider.stage}-documents/*
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+  - serverless-plugin-warmup
+
+custom:
+  warmup:
+    default:
+      enabled: true
+      events:
+        - schedule: 'rate(5 minutes)'
+      concurrency: 1
+
+functions:
+  # Authorizer
+  authorizer:
+    handler: src/handlers/authorizer.handler
+    memorySize: 256
+    timeout: 10
+
+  # Patient Handler
+  patientHandler:
+    handler: src/handlers/patient.handler
+    memorySize: 512
+    timeout: 30
+    reservedConcurrency: 100
+    events:
+      - http:
+          path: /api/v1/patients
+          method: post
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/patients
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/patients/{patientId}
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/patients/{patientId}
+          method: put
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/patients/{patientId}
+          method: delete
+          authorizer: authorizer
+          cors: true
+
+  # Provider Handler
+  providerHandler:
+    handler: src/handlers/provider.handler
+    memorySize: 512
+    timeout: 30
+    reservedConcurrency: 100
+    events:
+      - http:
+          path: /api/v1/providers
+          method: post
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/providers
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/providers/{providerId}
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/providers/{providerId}
+          method: put
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/providers/{providerId}/availability
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/providers/{providerId}/availability
+          method: put
+          authorizer: authorizer
+          cors: true
+
+  # Appointment Handler
+  appointmentHandler:
+    handler: src/handlers/appointment.handler
+    memorySize: 1024
+    timeout: 60
+    reservedConcurrency: 50
+    events:
+      - http:
+          path: /api/v1/appointments
+          method: post
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments/{appointmentId}
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments/{appointmentId}
+          method: put
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments/{appointmentId}
+          method: delete
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments/availability
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/appointments/batch
+          method: post
+          authorizer: authorizer
+          cors: true
+
+  # Medication Handler
+  medicationHandler:
+    handler: src/handlers/medication.handler
+    memorySize: 512
+    timeout: 30
+    reservedConcurrency: 100
+    events:
+      - http:
+          path: /api/v1/patients/{patientId}/medications
+          method: post
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/patients/{patientId}/medications
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/medications/{medicationId}
+          method: get
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/medications/{medicationId}
+          method: put
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/medications/{medicationId}
+          method: delete
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/medications/{medicationId}/adherence
+          method: post
+          authorizer: authorizer
+          cors: true
+
+  # Notification Handler
+  notificationHandler:
+    handler: src/handlers/notification.handler
+    memorySize: 512
+    timeout: 30
+    reservedConcurrency: 200
+    events:
+      - http:
+          path: /api/v1/notifications
+          method: post
+          authorizer: authorizer
+          cors: true
+      - http:
+          path: /api/v1/notifications/{notificationId}
+          method: get
+          authorizer: authorizer
+          cors: true
+
+  # Workers
+  notificationScheduler:
+    handler: src/workers/notificationScheduler.handler
+    memorySize: 256
+    timeout: 300
+    reservedConcurrency: 1
+    events:
+      - schedule:
+          rate: rate(5 minutes)
+          enabled: true
+
+  notificationProcessor:
+    handler: src/workers/notificationProcessor.handler
+    memorySize: 512
+    timeout: 300
+    reservedConcurrency: 10
+
+resources:
+  Resources:
+    # S3 Bucket for documents
+    DocumentsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: chronic-care-${self:provider.stage}-documents
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
